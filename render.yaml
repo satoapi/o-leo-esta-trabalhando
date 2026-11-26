@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: o-leo-esta-trabalhando
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.mjs
+    envVars:
+      - key: ACCESS_PIN
+        sync: false
+      - key: AUTH_SECRET
+        generateValue: true

@@ -1,0 +1,15 @@
+{
+  "name": "o-leo-esta-trabalhando",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Painel ao vivo com webcam e tela do AnyDesk, acessível pelo celular ou PC.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test"
+  }
+}

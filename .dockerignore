@@ -1,0 +1,10 @@
+node_modules
+data
+server.out.log
+server.err.log
+server.pid
+.git
+.gitignore
+README.md
+iniciar.bat
+render.yaml
