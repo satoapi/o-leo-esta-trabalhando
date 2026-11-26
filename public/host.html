@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#060911">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="description" content="Transmita sua webcam e a janela do AnyDesk para o painel.">
+  <title>Transmitir · O Leo está trabalhando?</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/host.js"></script>
+</head>
+<body>
+  <svg class="sr-only" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/>
+      <circle cx="12" cy="12" r="3.1"/>
+    </symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2.5" y="6.5" width="13" height="11" rx="2.5"/>
+      <path d="m15.5 10 5-2.6v9.2l-5-2.6"/>
+    </symbol>
+    <symbol id="i-screen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2.5" y="4.5" width="19" height="13" rx="2.5"/>
+      <path d="M8 21h8M12 17.5V21"/>
+    </symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+    </symbol>
+    <symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 4h6v6M20 4l-8 8M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/>
+    </symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/>
+      <path d="M12 9v4M12 17h.01"/>
+    </symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2.5" width="6" height="11" rx="3"/>
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>
+    </symbol>
+    <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1L10.7 5.3"/>
+      <path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.3-1.3"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m4 12.5 5 5L20 6.5"/>
+    </symbol>
+  </svg>
+
+  <div class="gate" id="auth-gate" hidden>
+    <section class="gate-card" aria-labelledby="gate-title">
+      <div class="gate-logo">
+        <svg aria-hidden="true"><use href="#i-eye"></use></svg>
+      </div>
+      <h1 id="gate-title">O Leo está trabalhando?</h1>
+      <p class="gate-sub">Entre com o PIN para configurar a transmissão deste PC.</p>
+      <form class="gate-form" id="auth-form" autocomplete="off">
+        <label class="field-label" for="pin">PIN de acesso</label>
+        <input class="pin-input" id="pin" name="pin" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="32" placeholder="Digite o PIN" required>
+        <button class="btn btn-primary" type="submit">Entrar no painel</button>
+        <p class="form-error" data-auth-error aria-live="polite"></p>
+      </form>
+      <p class="gate-foot">
+        Acesso restrito. O PIN está no terminal onde o app foi iniciado.<br>
+        <a href="/">← Ir para o painel de espectador</a>
+      </p>
+    </section>
+  </div>
+
+  <div class="shell" id="app" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg aria-hidden="true"><use href="#i-eye"></use></svg>
+        </div>
+        <div>
+          <h1>O Leo está trabalhando?</h1>
+          <p class="subtitle">Modo transmissão · este PC</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span class="pill mode" id="host-mode-pill"><span class="dot"></span><span id="host-mode-text">Modo host</span></span>
+        <a class="btn btn-sm" href="/" target="_blank" rel="noopener">
+          <svg aria-hidden="true"><use href="#i-external"></use></svg>
+          Ver painel
+        </a>
+        <button class="icon-btn" type="button" data-logout title="Sair" aria-label="Sair">
+          <svg aria-hidden="true"><use href="#i-logout"></use></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="notice" id="secure-warning" hidden>
+      <svg aria-hidden="true"><use href="#i-warn"></use></svg>
+      <div>
+        <strong>Este endereço não é seguro.</strong> Para liberar câmera e compartilhamento de tela, abra o app em
+        <strong>https://</strong> ou em <strong>http://localhost:3000/host</strong> no próprio PC.
+      </div>
+    </div>
+
+    <div class="notice" id="browser-warning" hidden>
+      <svg aria-hidden="true"><use href="#i-warn"></use></svg>
+      <div>Este navegador não oferece todas as permissões necessárias. Use Chrome ou Edge atualizado no computador.</div>
+    </div>
+
+    <div class="notice" id="background-notice" hidden>
+      <svg aria-hidden="true"><use href="#i-warn"></use></svg>
+      <div>
+        Esta aba ficou em segundo plano. Para evitar pausas no envio, mantenha esta janela visível. O navegador pode
+        reduzir a taxa de quadros quando ela está oculta.
+      </div>
+    </div>
+
+    <section class="card mt-block">
+      <div class="host-intro">
+        <div>
+          <span class="eyebrow">Transmissão ao vivo</span>
+          <h2>Coloque a webcam e o AnyDesk no ar.</h2>
+          <p class="lead">
+            Tudo acontece no seu navegador. Nada é gravado: o PC envia as imagens para o painel, e quem tem o PIN assiste.
+            Mantenha esta aba aberta durante a transmissão.
+          </p>
+          <ol class="steps">
+            <li><strong>Ligue a webcam</strong> e libere a câmera quando o navegador pedir.</li>
+            <li><strong>Compartilhe a janela do AnyDesk</strong> na janela de seleção do navegador.</li>
+            <li><strong>Envie o link e o PIN</strong> para quem vai acompanhar. O painel atualiza sozinho.</li>
+          </ol>
+          <button class="btn btn-sm popout-btn" type="button" id="popout">
+            <svg aria-hidden="true"><use href="#i-expand"></use></svg>
+            Abrir em janela separada (recomendado)
+          </button>
+          <p class="hint">Navegadores reduzem a taxa de quadros quando a aba fica oculta. Numa janela separada, basta deixá-la aberta — pode ficar atrás de outros programas, só não minimize.</p>
+        </div>
+
+        <div class="host-side">
+          <div class="stat-grid">
+            <div class="stat"><span class="stat-label">Assistindo</span><strong id="stat-viewers">0</strong></div>
+            <div class="stat"><span class="stat-label">FPS</span><strong id="stat-fps">0</strong></div>
+            <div class="stat"><span class="stat-label">Enviados</span><strong id="stat-sent">0</strong></div>
+            <div class="stat"><span class="stat-label">Falhas</span><strong id="stat-fails">0</strong></div>
+          </div>
+
+          <div class="quality-row">
+            <label for="quality">Qualidade do vídeo</label>
+            <select class="control" id="quality">
+              <option value="leve">Leve (economia de dados)</option>
+              <option value="padrao">Padrão</option>
+              <option value="nitido" selected>Nítido — até 720p a 24 fps</option>
+              <option value="maxima">Máxima — até Full HD a 30 fps</option>
+            </select>
+          </div>
+
+          <div class="presence-control">
+            <div class="top">
+              <h3>Status exibido no painel</h3>
+              <span class="badge is-live" id="presence-badge">Trabalhando</span>
+            </div>
+            <div class="presence-buttons" role="group" aria-label="Status do Leo">
+              <button class="segment is-wide" type="button" data-presence="trabalhando" data-state="trabalhando">Trabalhando</button>
+              <button class="segment" type="button" data-presence="pausa" data-state="pausa">Em pausa</button>
+              <button class="segment" type="button" data-presence="almocando" data-state="almocando">Almoçando</button>
+              <button class="segment" type="button" data-presence="banheiro" data-state="banheiro">No banheiro</button>
+              <button class="segment" type="button" data-presence="ausente" data-state="ausente">Ausente</button>
+            </div>
+            <div class="presence-note-row">
+              <input id="presence-note" maxlength="140" placeholder="Recado opcional para quem assiste">
+              <button class="btn btn-sm" type="button" id="presence-save">Salvar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="host-grid">
+      <section class="card" aria-labelledby="cam-title">
+        <div class="card-head">
+          <div class="card-title">
+            <span class="card-icon"><svg aria-hidden="true"><use href="#i-camera"></use></svg></span>
+            <div>
+              <h2 id="cam-title">Webcam</h2>
+              <p class="card-sub">Imagem da câmera deste PC</p>
+            </div>
+          </div>
+          <span class="badge" id="cam-badge">Desligada</span>
+        </div>
+        <div class="viewport" id="cam-viewport">
+          <video id="cam-video" autoplay muted playsinline></video>
+          <div class="placeholder">
+            <div class="placeholder-icon"><svg aria-hidden="true"><use href="#i-camera"></use></svg></div>
+            <p><strong>Webcam desligada</strong>Ligue a chave abaixo e autorize a câmera.</p>
+          </div>
+        </div>
+        <div class="host-panel-body">
+          <div class="host-actions">
+            <label class="switch">
+              <input type="checkbox" id="cam-toggle" role="switch" aria-label="Ligar ou desligar a webcam">
+              <span class="switch-track" aria-hidden="true"></span>
+              <span class="switch-text" id="cam-toggle-label">Webcam desligada</span>
+            </label>
+          </div>
+          <div class="device-row" id="cam-device-row" hidden>
+            <select class="control" id="cam-device" aria-label="Escolher câmera"></select>
+          </div>
+          <p class="hint" id="cam-hint">A transmissão é só de vídeo — o microfone não é enviado.</p>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="screen-title">
+        <div class="card-head">
+          <div class="card-title">
+            <span class="card-icon"><svg aria-hidden="true"><use href="#i-screen"></use></svg></span>
+            <div>
+              <h2 id="screen-title">AnyDesk</h2>
+              <p class="card-sub">Janela compartilhada do PC</p>
+            </div>
+          </div>
+          <span class="badge" id="screen-badge">Desligada</span>
+        </div>
+        <div class="viewport" id="screen-viewport">
+          <video id="screen-video" autoplay muted playsinline></video>
+          <div class="placeholder">
+            <div class="placeholder-icon"><svg aria-hidden="true"><use href="#i-screen"></use></svg></div>
+            <p><strong>AnyDesk não compartilhado</strong>Clique em “Compartilhar janela” e escolha o AnyDesk na lista.</p>
+          </div>
+        </div>
+        <div class="host-panel-body">
+          <div class="host-actions">
+            <button class="btn btn-primary" type="button" id="screen-start">
+              <svg aria-hidden="true"><use href="#i-screen"></use></svg>
+              Compartilhar janela
+            </button>
+            <button class="btn btn-danger" type="button" id="screen-stop" hidden>Parar compartilhamento</button>
+          </div>
+          <p class="hint" id="screen-hint">
+            Na janela do navegador, escolha a <strong>janela do AnyDesk</strong> (não a tela inteira, se possível).
+            Deixe o AnyDesk aberto e sem minimizar para a imagem não congelar.
+          </p>
+          <p class="hint warn" id="screen-warning" hidden></p>
+        </div>
+      </section>
+    </div>
+
+    <section class="card mt-block">
+      <div class="host-intro">
+        <div>
+          <span class="eyebrow">Convite</span>
+          <h2>Compartilhe o acesso.</h2>
+          <p class="lead">Envie o link abaixo e o PIN por um canal privado. Quem tiver os dois consegue assistir à transmissão.</p>
+        </div>
+        <div class="host-side">
+          <div class="quality-row">
+            <label for="share-link">Link do painel</label>
+          </div>
+          <div class="presence-note-row">
+            <input class="control" id="share-link" readonly>
+            <button class="btn btn-sm" type="button" id="share-copy">
+              <svg aria-hidden="true"><use href="#i-link"></use></svg>
+              Copiar
+            </button>
+          </div>
+          <p class="hint">O PIN de acesso não aparece aqui de propósito. Guarde-o e envie separadamente.</p>
+          <p class="hint" id="host-conn-hint">Conectando ao servidor…</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="host-footer">
+      <span>Nada é gravado. A transmissão dura enquanto esta aba estiver aberta.</span>
+      <a href="/" target="_blank" rel="noopener">Abrir visão do espectador ↗</a>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

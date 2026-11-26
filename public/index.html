@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#060911">
+  <meta name="description" content="Painel ao vivo com webcam e tela do AnyDesk, acessível pelo celular ou PC.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Leo trabalhando?">
+  <title>O Leo está trabalhando?</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/viewer.js"></script>
+</head>
+<body>
+  <svg class="sr-only" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/>
+      <circle cx="12" cy="12" r="3.1"/>
+    </symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2.5" y="6.5" width="13" height="11" rx="2.5"/>
+      <path d="m15.5 10 5-2.6v9.2l-5-2.6"/>
+    </symbol>
+    <symbol id="i-screen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2.5" y="4.5" width="19" height="13" rx="2.5"/>
+      <path d="M8 21h8M12 17.5V21"/>
+    </symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>
+    </symbol>
+    <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <path d="m6 6 12 12M18 6 6 18"/>
+    </symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+    </symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/>
+      <path d="M12 9v4M12 17h.01"/>
+    </symbol>
+  </svg>
+
+  <div class="gate" id="auth-gate" hidden>
+    <section class="gate-card" aria-labelledby="gate-title">
+      <div class="gate-logo">
+        <svg aria-hidden="true"><use href="#i-eye"></use></svg>
+      </div>
+      <h1 id="gate-title">O Leo está trabalhando?</h1>
+      <p class="gate-sub">Entre com o PIN para ver a webcam e o AnyDesk ao vivo.</p>
+      <form class="gate-form" id="auth-form" autocomplete="off">
+        <label class="field-label" for="pin">PIN de acesso</label>
+        <input class="pin-input" id="pin" name="pin" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="32" placeholder="Digite o PIN" required>
+        <button class="btn btn-primary" type="submit">Entrar no painel</button>
+        <p class="form-error" data-auth-error aria-live="polite"></p>
+      </form>
+      <p class="gate-foot">
+        Acesso restrito. Peça o PIN a quem configurou o app.<br>
+        <a href="/host">Sou eu que vou transmitir →</a>
+      </p>
+    </section>
+  </div>
+
+  <div class="shell" id="app" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg aria-hidden="true"><use href="#i-eye"></use></svg>
+        </div>
+        <div>
+          <h1>O Leo está trabalhando?</h1>
+          <p class="subtitle">Webcam e AnyDesk ao vivo</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span class="pill pill-host" id="host-pill">
+          <span class="dot"></span>
+          <span id="host-label">Conectando…</span>
+        </span>
+        <button class="icon-btn" type="button" data-logout title="Sair" aria-label="Sair">
+          <svg aria-hidden="true"><use href="#i-logout"></use></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="status-hero" aria-live="polite">
+      <div class="status-main">
+        <div class="status-orb" id="status-orb" data-state="indefinido" aria-hidden="true"></div>
+        <div class="status-copy">
+          <span class="status-eyebrow">Status do Leo</span>
+          <h2 id="status-title">Aguardando transmissão…</h2>
+          <p class="status-note" id="status-note">Conectando ao painel.</p>
+        </div>
+      </div>
+      <div class="status-side">
+        <span class="viewer-count" id="viewer-count"></span>
+        <span id="status-updated"></span>
+        <span class="live-line">
+          <span class="foot-dot" id="server-dot"></span>
+          <span id="server-status">Conectando…</span>
+        </span>
+      </div>
+    </section>
+
+    <main class="video-grid">
+      <section class="card" data-panel="cam" aria-labelledby="cam-title">
+        <div class="card-head">
+          <div class="card-title">
+            <span class="card-icon"><svg aria-hidden="true"><use href="#i-camera"></use></svg></span>
+            <div>
+              <h2 id="cam-title">Webcam</h2>
+              <p class="card-sub">Imagem ao vivo do PC</p>
+            </div>
+          </div>
+          <div class="card-tools">
+            <span class="badge" data-badge>Sem sinal</span>
+            <button class="icon-btn" type="button" data-fullscreen="cam-viewport" title="Tela cheia" aria-label="Ver webcam em tela cheia">
+              <svg aria-hidden="true"><use href="#i-expand"></use></svg>
+            </button>
+          </div>
+        </div>
+        <div class="viewport" id="cam-viewport">
+          <img id="cam-img" alt="Transmissão ao vivo da webcam" decoding="async">
+          <div class="placeholder" data-placeholder>
+            <div class="placeholder-icon"><svg aria-hidden="true"><use href="#i-camera"></use></svg></div>
+            <p><strong>Aguardando a webcam</strong><span data-placeholder-text>Quando o PC começar a transmitir, a imagem aparece aqui.</span></p>
+          </div>
+          <div class="stale-overlay" data-stale hidden>
+            <div class="stale-title"><svg width="15" height="15" aria-hidden="true"><use href="#i-warn"></use></svg> Imagem pausada</div>
+            <p data-stale-text>Sem atualizações.</p>
+          </div>
+          <button class="fs-exit" type="button" data-exit-fullscreen aria-label="Sair da tela cheia">
+            <svg aria-hidden="true"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="card-foot">
+          <span class="left"><span class="foot-dot" data-dot></span><span data-foot-text>Sem transmissão</span></span>
+          <span class="right" data-resolution></span>
+        </div>
+      </section>
+
+      <section class="card" data-panel="screen" aria-labelledby="screen-title">
+        <div class="card-head">
+          <div class="card-title">
+            <span class="card-icon"><svg aria-hidden="true"><use href="#i-screen"></use></svg></span>
+            <div>
+              <h2 id="screen-title">AnyDesk</h2>
+              <p class="card-sub">Tela compartilhada do PC</p>
+            </div>
+          </div>
+          <div class="card-tools">
+            <span class="badge" data-badge>Sem sinal</span>
+            <button class="icon-btn" type="button" data-fullscreen="screen-viewport" title="Tela cheia" aria-label="Ver AnyDesk em tela cheia">
+              <svg aria-hidden="true"><use href="#i-expand"></use></svg>
+            </button>
+          </div>
+        </div>
+        <div class="viewport" id="screen-viewport">
+          <img id="screen-img" alt="Transmissão ao vivo da janela do AnyDesk" decoding="async">
+          <div class="placeholder" data-placeholder>
+            <div class="placeholder-icon"><svg aria-hidden="true"><use href="#i-screen"></use></svg></div>
+            <p><strong>Aguardando o AnyDesk</strong><span data-placeholder-text>A janela compartilhada do AnyDesk aparece aqui.</span></p>
+          </div>
+          <div class="stale-overlay" data-stale hidden>
+            <div class="stale-title"><svg width="15" height="15" aria-hidden="true"><use href="#i-warn"></use></svg> Imagem pausada</div>
+            <p data-stale-text>Sem atualizações.</p>
+          </div>
+          <button class="fs-exit" type="button" data-exit-fullscreen aria-label="Sair da tela cheia">
+            <svg aria-hidden="true"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="card-foot">
+          <span class="left"><span class="foot-dot" data-dot></span><span data-foot-text>Sem transmissão</span></span>
+          <span class="right" data-resolution></span>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>Transmissão privada e sem gravação. Feito para o Leo.</span>
+      <span class="conn" id="conn-status"><span class="dot"></span><span>Conectando…</span></span>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
