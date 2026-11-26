@@ -109,6 +109,7 @@ for (const id of [
 let bossPopupShown = false;
 let bossPopupTimer = null;
 let bossAudioPrimed = false;
+let peerIdRetries = 0;
 const bossAlertAudio = new Audio('./boss-alert.wav');
 bossAlertAudio.preload = 'auto';
 
@@ -316,6 +317,7 @@ function initPeer() {
 
   peer.on('open', () => {
     if (state.peer !== peer) return;
+    peerIdRetries = 0;
     state.peerReady = true;
     state.peerError = '';
     showHostError('');
@@ -370,10 +372,21 @@ function handlePeerError(error) {
   state.peerReady = false;
 
   if (type === 'unavailable-id') {
-    state.peerError =
-      'Já existe uma transmissão aberta com este link. Feche a outra aba ou clique em “Gerar novo link”.';
-    showHostError(state.peerError);
+    if (peerIdRetries >= 5) {
+      state.peerError =
+        'Já existe outra transmissão aberta com este link. Feche a outra aba e recarregue esta página.';
+      showHostError(state.peerError);
+      updatePeerUi();
+      return;
+    }
+    peerIdRetries += 1;
+    state.peerError = 'Reconectando a transmissão…';
+    showHostError('');
     updatePeerUi();
+    destroyPeer();
+    setTimeout(() => {
+      if (!state.shuttingDown) initPeer();
+    }, 1500 + peerIdRetries * 1200);
     return;
   }
 
