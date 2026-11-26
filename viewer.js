@@ -11,6 +11,8 @@ const AUTH_TIMEOUT_MS = 9000;
 const HEARTBEAT_MS = 8000;
 const WATCHDOG_MS = 24000;
 const LIVE_WINDOW_MS = 6500;
+const AUTO_PIN_KEY = 'leo-viewer-auto-pin';
+const AUTO_FLAG_KEY = 'leo-viewer-auto';
 
 const PRESENCE = {
   trabalhando: {
@@ -143,6 +145,7 @@ const ui = {
   app: document.getElementById('app'),
   form: document.getElementById('auth-form'),
   pinInput: document.getElementById('pin'),
+  autoLogin: document.getElementById('auto-login'),
   gateError: document.querySelector('[data-auth-error]'),
   gateButton: document.querySelector('#auth-form button[type="submit"]'),
   hostPill: document.getElementById('host-pill'),
@@ -172,6 +175,7 @@ if (!room) {
   ui.gate.hidden = false;
   ui.app.hidden = true;
 
+  const auto = readAutoLogin();
   let savedPin = '';
   try {
     savedPin = sessionStorage.getItem('leo-viewer-pin') || '';
@@ -179,9 +183,12 @@ if (!room) {
     /* modo privado */
   }
 
-  if (savedPin) {
-    ui.pinInput.value = savedPin;
-    setTimeout(() => attempt(savedPin, { auto: true }), 120);
+  if (ui.autoLogin) ui.autoLogin.checked = auto.enabled;
+  const initialPin = auto.enabled && auto.pin ? auto.pin : savedPin;
+
+  if (initialPin) {
+    ui.pinInput.value = initialPin;
+    setTimeout(() => attempt(initialPin, { auto: true }), 120);
   } else {
     setTimeout(() => ui.pinInput.focus(), 120);
   }
@@ -211,6 +218,39 @@ document.addEventListener('visibilitychange', () => {
 
 window.leoViewerDebug = { state, panels };
 
+function readAutoLogin() {
+  try {
+    const enabled = localStorage.getItem(AUTO_FLAG_KEY) !== '0';
+    const pin = localStorage.getItem(AUTO_PIN_KEY) || '';
+    return { enabled, pin };
+  } catch {
+    return { enabled: false, pin: '' };
+  }
+}
+
+function saveAutoLogin(pin, enabled) {
+  try {
+    if (enabled) {
+      localStorage.setItem(AUTO_FLAG_KEY, '1');
+      localStorage.setItem(AUTO_PIN_KEY, pin);
+    } else {
+      localStorage.setItem(AUTO_FLAG_KEY, '0');
+      localStorage.removeItem(AUTO_PIN_KEY);
+    }
+  } catch {
+    /* modo privado */
+  }
+}
+
+function clearAutoLogin() {
+  try {
+    localStorage.removeItem(AUTO_PIN_KEY);
+    localStorage.setItem(AUTO_FLAG_KEY, '0');
+  } catch {
+    /* modo privado */
+  }
+}
+
 function bindPageUi() {
   for (const button of document.querySelectorAll('[data-fullscreen]')) {
     button.addEventListener('click', () => enterFullscreen(button.dataset.fullscreen));
@@ -231,6 +271,7 @@ function bindPageUi() {
     } catch {
       /* ignora */
     }
+    clearAutoLogin();
     state.manualClose = true;
     shutdown();
     location.reload();
@@ -436,6 +477,7 @@ function handleData(raw) {
     } catch {
       /* modo privado */
     }
+    saveAutoLogin(state.pin, Boolean(ui.autoLogin?.checked));
 
     ui.gate.hidden = true;
     ui.app.hidden = false;
@@ -464,6 +506,8 @@ function handleData(raw) {
     } catch {
       /* ignora */
     }
+    clearAutoLogin();
+    if (ui.autoLogin) ui.autoLogin.checked = false;
     closeConnection();
     ui.gate.hidden = false;
     ui.app.hidden = true;

@@ -13,9 +13,9 @@
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=20261126a">
+  <link rel="stylesheet" href="./styles.css?v=20261126c">
   <script src="./peerjs.min.js"></script>
-  <script type="module" src="./viewer.js?v=20261126a"></script>
+  <script type="module" src="./viewer.js?v=20261126c"></script>
 </head>
 <body>
   <svg class="sr-only" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -56,6 +56,11 @@
       <form class="gate-form" id="auth-form" autocomplete="off">
         <label class="field-label" for="pin">PIN de acesso</label>
         <input class="pin-input" id="pin" name="pin" type="text" inputmode="text" autocomplete="off" maxlength="32" placeholder="Digite o PIN" required>
+        <label class="checkline" for="auto-login">
+          <input id="auto-login" type="checkbox">
+          <span><strong>Entrar automaticamente</strong> neste aparelho</span>
+        </label>
+        <p class="check-hint">O PIN fica salvo só neste navegador. Não use em computadores compartilhados.</p>
         <button class="btn btn-primary" type="submit">Entrar no painel</button>
         <p class="form-error" data-auth-error aria-live="polite"></p>
       </form>

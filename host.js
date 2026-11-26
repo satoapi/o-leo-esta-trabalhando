@@ -98,9 +98,19 @@ for (const id of [
   'host-error-text',
   'boss-warning',
   'boss-warning-count',
+  'boss-popup',
+  'boss-popup-text',
+  'boss-popup-close',
+  'boss-popup-sound',
 ]) {
   el[id] = document.getElementById(id);
 }
+
+let bossPopupShown = false;
+let bossPopupTimer = null;
+let bossAudioPrimed = false;
+const bossAlertAudio = new Audio('./boss-alert.wav');
+bossAlertAudio.preload = 'auto';
 
 const presenceButtons = [...document.querySelectorAll('[data-presence]')];
 const screenHintDefault = el['screen-hint']?.innerHTML || '';
@@ -166,6 +176,16 @@ function start() {
 }
 
 function bindUi() {
+  el['boss-popup-close']?.addEventListener('click', hideBossPopup);
+  el['boss-popup-sound']?.addEventListener('click', () => {
+    primeBossAudio();
+    playBossAlert();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && el['boss-popup'] && !el['boss-popup'].hidden) hideBossPopup();
+  });
+  document.addEventListener('pointerdown', primeBossAudio, { once: true, capture: true });
+
   el['cam-toggle'].addEventListener('change', () => {
     if (el['cam-toggle'].checked) startCam();
     else stopSource('cam');
@@ -935,6 +955,136 @@ async function sampleStats() {
   updateStats();
 }
 
+function bossViewerText(count) {
+  const total = Math.max(1, Number(count) || 1);
+  if (total === 1) return '1 pessoa começou a assistir à sua transmissão agora.';
+  return `${new Intl.NumberFormat('pt-BR').format(total)} pessoas estão assistindo à sua transmissão agora.`;
+}
+
+function primeBossAudio() {
+  if (bossAudioPrimed) return;
+  bossAudioPrimed = true;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx) {
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      gain.gain.value = 0.00001;
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.03);
+      setTimeout(() => {
+        try {
+          ctx.close();
+        } catch {
+          /* ignora */
+        }
+      }, 200);
+    }
+  } catch {
+    /* áudio indisponível */
+  }
+  try {
+    bossAlertAudio.load();
+  } catch {
+    /* ignora */
+  }
+}
+
+function playBossBeep() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const now = ctx.currentTime;
+    const tone = (freq, start, duration) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + start);
+      gain.gain.setValueAtTime(0.0001, now + start);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + start + duration);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + start);
+      osc.stop(now + start + duration + 0.05);
+    };
+    tone(880, 0, 0.16);
+    tone(660, 0.22, 0.22);
+    setTimeout(() => {
+      try {
+        ctx.close();
+      } catch {
+        /* ignora */
+      }
+    }, 1200);
+  } catch {
+    /* sem áudio */
+  }
+}
+
+function speakBossAlert() {
+  try {
+    if (!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance('Seu chefe está te olhando');
+    utter.lang = 'pt-BR';
+    utter.rate = 0.95;
+    utter.pitch = 0.9;
+    utter.volume = 1;
+    speechSynthesis.speak(utter);
+  } catch {
+    /* ignora */
+  }
+}
+
+function playBossAlert() {
+  playBossBeep();
+  try {
+    bossAlertAudio.currentTime = 0;
+    const played = bossAlertAudio.play();
+    if (played && typeof played.catch === 'function') {
+      played.catch(() => speakBossAlert());
+    }
+  } catch {
+    speakBossAlert();
+  }
+}
+
+function showBossPopup(count) {
+  if (!el['boss-popup']) return;
+  el['boss-popup-text'].textContent = bossViewerText(count);
+  el['boss-popup'].hidden = false;
+  document.body.classList.add('boss-popup-open');
+  el['boss-popup-close']?.focus({ preventScroll: true });
+  primeBossAudio();
+  playBossAlert();
+  clearTimeout(bossPopupTimer);
+  bossPopupTimer = setTimeout(hideBossPopup, 12000);
+}
+
+function hideBossPopup() {
+  clearTimeout(bossPopupTimer);
+  bossPopupTimer = null;
+  if (!el['boss-popup']) return;
+  el['boss-popup'].hidden = true;
+  document.body.classList.remove('boss-popup-open');
+  try {
+    bossAlertAudio.pause();
+    bossAlertAudio.currentTime = 0;
+  } catch {
+    /* ignora */
+  }
+  try {
+    window.speechSynthesis?.cancel();
+  } catch {
+    /* ignora */
+  }
+}
+
 function updateStats() {
   el['stat-viewers'].textContent = String(state.viewersCount);
   el['stat-fps'].textContent = anyActive() && state.viewersCount ? state.fps.toFixed(1).replace('.', ',') : '0';
@@ -948,6 +1098,15 @@ function updateStats() {
       state.viewersCount === 1
         ? '1 pessoa assistindo agora'
         : `${new Intl.NumberFormat('pt-BR').format(state.viewersCount)} pessoas assistindo agora`;
+    if (!bossPopupShown) {
+      bossPopupShown = true;
+      showBossPopup(state.viewersCount);
+    } else if (el['boss-popup'] && !el['boss-popup'].hidden) {
+      el['boss-popup-text'].textContent = bossViewerText(state.viewersCount);
+    }
+  } else if (bossPopupShown) {
+    bossPopupShown = false;
+    hideBossPopup();
   }
 
   updatePeerUi();

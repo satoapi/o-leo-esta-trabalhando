@@ -10,9 +10,9 @@
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=20261126b">
+  <link rel="stylesheet" href="./styles.css?v=20261126c">
   <script src="./peerjs.min.js"></script>
-  <script type="module" src="./host.js?v=20261126b"></script>
+  <script type="module" src="./host.js?v=20261126c"></script>
 </head>
 <body>
   <svg class="sr-only" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -269,6 +269,18 @@
       <span>Nada é gravado. A transmissão dura enquanto esta aba estiver aberta.</span>
       <a href="./" target="_blank" rel="noopener">Abrir visão do espectador ↗</a>
     </footer>
+  </div>
+
+  <div class="boss-popup" id="boss-popup" role="alertdialog" aria-modal="true" aria-labelledby="boss-popup-title" hidden>
+    <div class="boss-popup-card">
+      <div class="boss-popup-eyes" aria-hidden="true">👀</div>
+      <h2 id="boss-popup-title">Seu chefe está te olhando</h2>
+      <p id="boss-popup-text">Alguém começou a assistir à sua transmissão.</p>
+      <div class="boss-popup-actions">
+        <button class="btn btn-danger" type="button" id="boss-popup-close">Entendi</button>
+        <button class="btn btn-sm" type="button" id="boss-popup-sound">Ouvir de novo</button>
+      </div>
+    </div>
   </div>
 
   <div id="toast" class="toast" role="status" hidden></div>
