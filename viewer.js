@@ -5,7 +5,7 @@ import {
   peerOptions,
   timeAgo,
   toast,
-} from './shared.js';
+} from './shared.js?v=20261126e';
 
 const AUTH_TIMEOUT_MS = 9000;
 const HEARTBEAT_MS = 8000;
@@ -161,8 +161,10 @@ const ui = {
 };
 
 bindPageUi();
-setInterval(render, 1000);
-setInterval(updatePresenceAge, 1000);
+setInterval(() => {
+  render();
+  updatePresenceAge();
+}, 1000);
 
 const room = getRoomForViewer();
 if (!room) {
@@ -838,8 +840,6 @@ function markFrame(kind, firstOnly) {
     panel.stale.hidden = true;
     updateResolution(kind);
     renderPanel(kind);
-  } else if (!firstOnly) {
-    updateResolution(kind);
   }
 }
 

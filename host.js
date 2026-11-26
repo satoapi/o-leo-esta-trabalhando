@@ -13,14 +13,48 @@ import {
   timeAgo,
   toast,
   viewerLink,
-} from './shared.js';
+} from './shared.js?v=20261126e';
 
 const QUALITY = {
-  leve: { maxW: 640, maxH: 360, fps: 8, maxBitrate: 450_000 },
-  padrao: { maxW: 1280, maxH: 720, fps: 15, maxBitrate: 1_200_000 },
-  nitido: { maxW: 1280, maxH: 720, fps: 24, maxBitrate: 2_000_000 },
-  maxima: { maxW: 1920, maxH: 1080, fps: 30, maxBitrate: 3_500_000 },
+  leve: {
+    cam: { maxW: 640, maxH: 360, fps: 15, maxBitrate: 300_000 },
+    screen: { maxW: 1280, maxH: 720, fps: 10, maxBitrate: 650_000 },
+  },
+  padrao: {
+    cam: { maxW: 960, maxH: 540, fps: 24, maxBitrate: 700_000 },
+    screen: { maxW: 1280, maxH: 720, fps: 15, maxBitrate: 1_400_000 },
+  },
+  nitido: {
+    cam: { maxW: 1280, maxH: 720, fps: 24, maxBitrate: 1_200_000 },
+    screen: { maxW: 1280, maxH: 720, fps: 18, maxBitrate: 2_000_000 },
+  },
+  maxima: {
+    cam: { maxW: 1920, maxH: 1080, fps: 30, maxBitrate: 2_200_000 },
+    screen: { maxW: 1920, maxH: 1080, fps: 24, maxBitrate: 3_400_000 },
+  },
 };
+
+function qualityFor(kind) {
+  const preset = QUALITY[state.quality] || QUALITY.nitido;
+  return preset[kind] || preset.cam;
+}
+
+function viewerShareFactor() {
+  const viewers = Math.max(1, Number(state.viewersCount) || 1);
+  if (viewers <= 1) return 1;
+  return Math.max(0.65, 1 / Math.sqrt(viewers));
+}
+
+const senderTuning = new WeakMap();
+
+function tuningFor(call, kind) {
+  let tuning = senderTuning.get(call);
+  if (!tuning || tuning.kind !== kind) {
+    tuning = { kind, factor: 1, fpsFactor: 1, bad: 0, cpu: 0, good: 0, applying: false };
+    senderTuning.set(call, tuning);
+  }
+  return tuning;
+}
 
 const PRESENCE_LABEL = {
   trabalhando: 'Trabalhando',
@@ -110,7 +144,7 @@ let bossPopupShown = false;
 let bossPopupTimer = null;
 let bossAudioPrimed = false;
 let peerIdRetries = 0;
-const bossAlertAudio = new Audio('./boss-alert.wav');
+const bossAlertAudio = new Audio('./boss-alert.mp3');
 bossAlertAudio.preload = 'auto';
 
 const presenceButtons = [...document.querySelectorAll('[data-presence]')];
@@ -147,7 +181,7 @@ function start() {
 
   initPeer();
   setInterval(sampleStats, 1000);
-  setInterval(updateStats, 1000);
+  setInterval(adaptStreamQuality, 5000);
   setInterval(checkViewerHeartbeats, 10_000);
   setInterval(renderPresenceAge, 30_000);
 
@@ -537,7 +571,9 @@ function countViewers() {
 }
 
 function updateViewers() {
+  const previous = state.viewersCount;
   state.viewersCount = countViewers();
+  if (state.viewersCount !== previous) applyAllSenderParams();
   updateStats();
   updatePeerUi();
   broadcast({ type: 'viewers', count: state.viewersCount });
@@ -637,13 +673,13 @@ async function startCam(deviceId) {
   el['cam-hint'].textContent = 'Aguardando a permissão da câmera…';
   updateSourceUi('cam');
 
-  const preset = QUALITY[state.quality] || QUALITY.nitido;
+  const preset = qualityFor('cam');
   const constraints = {
     audio: false,
     video: {
       width: { ideal: preset.maxW },
       height: { ideal: preset.maxH },
-      frameRate: { ideal: preset.fps, max: 30 },
+      frameRate: { ideal: preset.fps, max: preset.fps },
       ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
     },
   };
@@ -728,13 +764,13 @@ async function startScreen() {
   state.errors.screen = '';
   updateSourceUi('screen');
 
-  const preset = QUALITY[state.quality] || QUALITY.nitido;
+  const preset = qualityFor('screen');
 
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: {
         displaySurface: 'window',
-        frameRate: { ideal: preset.fps, max: 30 },
+        frameRate: { ideal: preset.fps, max: preset.fps },
         width: { max: preset.maxW },
         height: { max: preset.maxH },
       },
@@ -806,7 +842,12 @@ function attachSource(kind, stream) {
 
   const track = stream.getVideoTracks()[0];
   if (track) {
-    track.contentHint = kind === 'screen' ? 'text' : 'motion';
+    const preset = qualityFor(kind);
+    // "detail" mantém o texto legível; "motion" prioriza fluidez na webcam.
+    track.contentHint = kind === 'screen' ? 'detail' : 'motion';
+    track
+      .applyConstraints({ frameRate: { ideal: preset.fps, max: preset.fps } })
+      .catch(() => {});
     track.addEventListener('ended', () => stopSource(kind));
   }
 
@@ -878,11 +919,10 @@ function closeCallsFor(kind, viewerId = null) {
 }
 
 async function applyQuality() {
-  const preset = QUALITY[state.quality] || QUALITY.nitido;
-
   for (const kind of ['cam', 'screen']) {
     const track = state.streams[kind]?.getVideoTracks()[0];
     if (!track) continue;
+    const preset = qualityFor(kind);
     try {
       await track.applyConstraints({
         width: { ideal: preset.maxW },
@@ -895,6 +935,20 @@ async function applyQuality() {
   }
 
   for (const kind of ['cam', 'screen']) {
+    for (const call of state.calls[kind].values()) {
+      const tuning = tuningFor(call, kind);
+      tuning.factor = 1;
+      tuning.fpsFactor = 1;
+      tuning.bad = 0;
+      tuning.cpu = 0;
+      tuning.good = 0;
+    }
+  }
+  applyAllSenderParams();
+}
+
+function applyAllSenderParams() {
+  for (const kind of ['cam', 'screen']) {
     for (const call of state.calls[kind].values()) applySenderParams(call, kind);
   }
 }
@@ -902,22 +956,111 @@ async function applyQuality() {
 async function applySenderParams(call, kind) {
   const pc = call?.peerConnection;
   if (!pc) return;
-  const preset = QUALITY[state.quality] || QUALITY.nitido;
 
-  for (const sender of pc.getSenders()) {
-    if (sender.track?.kind !== 'video') continue;
-    try {
+  const tuning = tuningFor(call, kind);
+  if (tuning.applying) return;
+
+  const preset = qualityFor(kind);
+  const target = Math.max(
+    120_000,
+    Math.round(preset.maxBitrate * viewerShareFactor() * tuning.factor),
+  );
+  const fpsTarget = Math.max(12, Math.round(preset.fps * tuning.fpsFactor));
+
+  tuning.applying = true;
+  try {
+    for (const sender of pc.getSenders()) {
+      if (sender.track?.kind !== 'video') continue;
       const params = sender.getParameters();
       if (!params.encodings?.length) params.encodings = [{}];
-      for (const encoding of params.encodings) {
-        encoding.maxBitrate = preset.maxBitrate;
-        encoding.maxFramerate = preset.fps;
+      if ('degradationPreference' in params) {
+        params.degradationPreference =
+          kind === 'screen' ? 'balanced' : 'maintain-framerate';
       }
-      await sender.setParameters(params);
-    } catch {
-      /* o navegador negocia sozinho */
+      for (const encoding of params.encodings) {
+        encoding.maxBitrate = target;
+        encoding.maxFramerate = fpsTarget;
+        if ('priority' in encoding) encoding.priority = kind === 'screen' ? 'high' : 'medium';
+        if ('networkPriority' in encoding) {
+          encoding.networkPriority = kind === 'screen' ? 'high' : 'low';
+        }
+      }
+      try {
+        await sender.setParameters(params);
+      } catch {
+        // Navegadores mais antigos recusam prioridades; aplica só o essencial.
+        const fallback = sender.getParameters();
+        if (!fallback.encodings?.length) fallback.encodings = [{}];
+        for (const encoding of fallback.encodings) {
+          encoding.maxBitrate = target;
+          encoding.maxFramerate = fpsTarget;
+        }
+        await sender.setParameters(fallback).catch(() => {});
+      }
     }
+  } finally {
+    tuning.applying = false;
   }
+}
+
+async function adaptStreamQuality() {
+  if (!state.viewersCount) return;
+
+  const entries = [];
+  for (const kind of ['cam', 'screen']) {
+    for (const call of state.calls[kind].values()) entries.push([kind, call]);
+  }
+
+  await Promise.all(
+    entries.map(async ([kind, call]) => {
+      const pc = call?.peerConnection;
+      if (!pc) return;
+
+      let reason = '';
+      try {
+        const report = await pc.getStats();
+        report.forEach((entry) => {
+          if (entry.type === 'outbound-rtp' && entry.kind === 'video') {
+            reason = entry.qualityLimitationReason || '';
+          }
+        });
+      } catch {
+        return;
+      }
+
+      const tuning = tuningFor(call, kind);
+      if (reason === 'bandwidth') {
+        tuning.bad += 1;
+        tuning.cpu = 0;
+        tuning.good = 0;
+      } else if (reason === 'cpu') {
+        tuning.cpu += 1;
+        tuning.bad = 0;
+        tuning.good = 0;
+      } else {
+        tuning.good += 1;
+        tuning.bad = 0;
+        tuning.cpu = 0;
+      }
+
+      if (tuning.bad >= 2 && tuning.factor > 0.55) {
+        tuning.factor = Math.max(0.55, tuning.factor - 0.15);
+        tuning.bad = 0;
+        tuning.good = 0;
+        applySenderParams(call, kind);
+      } else if (tuning.cpu >= 2 && tuning.fpsFactor > 0.5) {
+        tuning.fpsFactor = Math.max(0.5, tuning.fpsFactor - 0.2);
+        tuning.cpu = 0;
+        tuning.good = 0;
+        applySenderParams(call, kind);
+      } else if (tuning.good >= 6 && (tuning.factor < 1 || tuning.fpsFactor < 1)) {
+        tuning.factor = Math.min(1, tuning.factor + 0.08);
+        tuning.fpsFactor = Math.min(1, tuning.fpsFactor + 0.1);
+        tuning.good = 0;
+        applySenderParams(call, kind);
+      }
+    }),
+  );
 }
 
 function anyActive() {
@@ -1006,47 +1149,14 @@ function primeBossAudio() {
   }
 }
 
-function playBossBeep() {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-    const now = ctx.currentTime;
-    const tone = (freq, start, duration) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, now + start);
-      gain.gain.setValueAtTime(0.0001, now + start);
-      gain.gain.exponentialRampToValueAtTime(0.18, now + start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + start + duration);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(now + start);
-      osc.stop(now + start + duration + 0.05);
-    };
-    tone(880, 0, 0.16);
-    tone(660, 0.22, 0.22);
-    setTimeout(() => {
-      try {
-        ctx.close();
-      } catch {
-        /* ignora */
-      }
-    }, 1200);
-  } catch {
-    /* sem áudio */
-  }
-}
-
 function speakBossAlert() {
   try {
     if (!('speechSynthesis' in window)) return;
     speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance('Seu chefe está te olhando');
+    const utter = new SpeechSynthesisUtterance('Atenção, novo espectador');
     utter.lang = 'pt-BR';
-    utter.rate = 0.95;
-    utter.pitch = 0.9;
+    utter.rate = 1;
+    utter.pitch = 1;
     utter.volume = 1;
     speechSynthesis.speak(utter);
   } catch {
@@ -1055,7 +1165,6 @@ function speakBossAlert() {
 }
 
 function playBossAlert() {
-  playBossBeep();
   try {
     bossAlertAudio.currentTime = 0;
     const played = bossAlertAudio.play();
