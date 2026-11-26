@@ -1,6 +1,7 @@
 /* Utilidades compartilhadas da versão estática (GitHub Pages + WebRTC). */
 
 export const DEFAULT_PIN = '12345678';
+export const DEFAULT_ROOM = 'leo-j5954tz9n5ey';
 export const ROOM_KEY = 'leo-host-room';
 export const VIEWER_ROOM_KEY = 'leo-viewer-room';
 export const HOST_PIN_KEY = 'leo-host-pin';
@@ -34,38 +35,13 @@ export function randomRoom() {
 }
 
 export function getOrCreateHostRoom() {
-  let fromUrl = null;
+  // Sala fixa: garante que o link curto permanente continue funcionando.
   try {
-    const params = new URLSearchParams(location.search);
-    fromUrl = params.get('sala') || params.get('room');
-  } catch {
-    /* URL inválida: segue com o armazenamento local */
-  }
-
-  if (isValidRoom(fromUrl)) {
-    const room = fromUrl.trim();
-    try {
-      localStorage.setItem(ROOM_KEY, room);
-    } catch {
-      /* modo privado sem armazenamento */
-    }
-    return room;
-  }
-
-  try {
-    const saved = localStorage.getItem(ROOM_KEY);
-    if (isValidRoom(saved)) return saved.trim();
+    localStorage.setItem(ROOM_KEY, DEFAULT_ROOM);
   } catch {
     /* modo privado sem armazenamento */
   }
-
-  const room = randomRoom();
-  try {
-    localStorage.setItem(ROOM_KEY, room);
-  } catch {
-    /* modo privado sem armazenamento */
-  }
-  return room;
+  return DEFAULT_ROOM;
 }
 
 export function getRoomForViewer() {
@@ -90,14 +66,8 @@ export function getRoomForViewer() {
     return room;
   }
 
-  try {
-    const saved = localStorage.getItem(VIEWER_ROOM_KEY);
-    if (isValidRoom(saved)) return saved.trim();
-  } catch {
-    /* ignora */
-  }
-
-  return null;
+  // Sem sala no endereço: usa a sala fixa do painel.
+  return DEFAULT_ROOM;
 }
 
 export function viewerLink(room) {

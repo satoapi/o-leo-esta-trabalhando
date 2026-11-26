@@ -5,7 +5,7 @@ import {
   peerOptions,
   timeAgo,
   toast,
-} from './shared.js?v=20261126f';
+} from './shared.js?v=20261126g';
 
 const AUTH_TIMEOUT_MS = 9000;
 const HEARTBEAT_MS = 8000;

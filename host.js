@@ -6,14 +6,12 @@ import {
   loadPresence,
   normalizePin,
   peerOptions,
-  randomRoom,
-  ROOM_KEY,
   savePresence as persistPresence,
   setHostPin,
   timeAgo,
   toast,
   viewerLink,
-} from './shared.js?v=20261126f';
+} from './shared.js?v=20261126g';
 
 const QUALITY = {
   leve: {
@@ -122,6 +120,7 @@ for (const id of [
   'share-link',
   'share-copy',
   'share-invite',
+  'viewer-open',
   'access-pin',
   'pin-save',
   'room-new',
@@ -165,6 +164,7 @@ function start() {
 
   el.quality.value = state.quality;
   el['share-link'].value = viewerLink(state.room);
+  if (el['viewer-open']) el['viewer-open'].href = viewerLink(state.room);
   el['access-pin'].value = state.pin;
   el['presence-note'].value = state.presence.note || '';
 
@@ -305,19 +305,8 @@ function bindUi() {
     }
   });
 
-  el['room-new'].addEventListener('click', () => {
-    if (!confirm('Gerar um novo link? Quem já estiver assistindo será desconectado.')) return;
-    state.room = randomRoom();
-    try {
-      localStorage.setItem(ROOM_KEY, state.room);
-    } catch {
-      /* modo privado */
-    }
-    el['share-link'].value = viewerLink(state.room);
-    disconnectAllViewers();
-    destroyPeer();
-    initPeer();
-    toast('Novo link gerado. Envie o novo link e o PIN.');
+  el['room-new']?.addEventListener('click', () => {
+    toast('O link é fixo para manter o atalho compartilhado funcionando.');
   });
 
   if (navigator.mediaDevices?.addEventListener) {
