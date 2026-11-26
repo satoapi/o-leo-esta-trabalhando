@@ -96,6 +96,8 @@ for (const id of [
   'background-notice',
   'host-error',
   'host-error-text',
+  'boss-warning',
+  'boss-warning-count',
 ]) {
   el[id] = document.getElementById(id);
 }
@@ -110,7 +112,7 @@ function start() {
   if (state.started) return;
   state.started = true;
 
-  window.leoHostDebug = { state, QUALITY };
+  window.leoHostDebug = { state, QUALITY, updateStats };
 
   el.quality.value = state.quality;
   el['share-link'].value = viewerLink(state.room);
@@ -938,6 +940,16 @@ function updateStats() {
   el['stat-fps'].textContent = anyActive() && state.viewersCount ? state.fps.toFixed(1).replace('.', ',') : '0';
   el['stat-sent'].textContent = anyActive() && state.viewersCount ? formatBytes(state.sentBytes) : '0 B';
   el['stat-fails'].textContent = new Intl.NumberFormat('pt-BR').format(state.fails);
+
+  const watching = state.viewersCount > 0;
+  el['boss-warning'].hidden = !watching;
+  if (watching) {
+    el['boss-warning-count'].textContent =
+      state.viewersCount === 1
+        ? '1 pessoa assistindo agora'
+        : `${new Intl.NumberFormat('pt-BR').format(state.viewersCount)} pessoas assistindo agora`;
+  }
+
   updatePeerUi();
 }
 
@@ -1171,4 +1183,4 @@ function createFakeCamStream() {
 }
 
 /* Mantém referências úteis para depuração no console. */
-window.leoHostDebug = { state, QUALITY };
+window.leoHostDebug = { state, QUALITY, updateStats };
