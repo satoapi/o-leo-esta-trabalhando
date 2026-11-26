@@ -5,7 +5,7 @@ import {
   peerOptions,
   timeAgo,
   toast,
-} from './shared.js?v=20261126e';
+} from './shared.js?v=20261126f';
 
 const AUTH_TIMEOUT_MS = 9000;
 const HEARTBEAT_MS = 8000;
@@ -63,6 +63,7 @@ const state = {
   room: null,
   pin: '',
   clientId: getClientId(),
+  device: null,
   peer: null,
   peerReady: false,
   peerTimer: null,
@@ -92,6 +93,9 @@ const state = {
   frameTimers: { cam: null, screen: null },
   immersive: null,
 };
+
+state.device = describeDevice();
+refineDeviceInfo();
 
 const panels = {};
 
@@ -405,6 +409,7 @@ function openConnection() {
       type: 'hello',
       pin: state.pin,
       clientId: state.clientId,
+      device: state.device,
       v: 1,
     });
     clearTimeout(state.authTimer);
@@ -459,6 +464,11 @@ function handleData(raw) {
   if (!message || typeof message.type !== 'string') return;
 
   state.lastInbound = Date.now();
+
+  if (message.type === 'identify') {
+    sendDevice();
+    return;
+  }
 
   if (message.type === 'auth-ok') {
     clearTimeout(state.authTimer);
@@ -1107,4 +1117,107 @@ async function exitFullscreen() {
     document.body.classList.remove('has-immersive');
     state.immersive = null;
   }
+}
+
+/* ---------------- Identificação do aparelho de quem assiste ---------------- */
+
+function describeDevice() {
+  const ua = navigator.userAgent || '';
+  const platform = navigator.userAgentData?.platform || navigator.platform || '';
+  const touchMac = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+  const iPad = /iPad/i.test(ua) || touchMac;
+  const iPhone = /iPhone|iPod/i.test(ua);
+  const android = /Android/i.test(ua);
+  const tablet = iPad || (android && !/Mobile/i.test(ua));
+  const mobile = !tablet && (iPhone || android || /Mobile|Windows Phone/i.test(ua));
+
+  const browser = detectBrowser(ua);
+  const os = detectOs(ua, platform, { iPad, iPhone, android });
+  const model = detectModel(ua, platform, { iPad, iPhone, android });
+  const kind = tablet ? 'tablet' : mobile ? 'celular' : 'computador';
+
+  return {
+    label: composeDeviceLabel(model, browser),
+    kind,
+    os,
+    browser,
+    screen: `${window.screen?.width || 0}×${window.screen?.height || 0}`,
+    icon: mobile || tablet ? '📱' : '💻',
+  };
+}
+
+function detectBrowser(ua) {
+  if (/Edg\//i.test(ua)) return 'Edge';
+  if (/OPR\//i.test(ua)) return 'Opera';
+  if (/SamsungBrowser/i.test(ua)) return 'Samsung Internet';
+  if (/CriOS/i.test(ua)) return 'Chrome';
+  if (/FxiOS/i.test(ua)) return 'Firefox';
+  if (/Firefox\//i.test(ua)) return 'Firefox';
+  if (/Chrome\//i.test(ua)) return 'Chrome';
+  if (/Safari\//i.test(ua)) return 'Safari';
+  return 'Navegador';
+}
+
+function detectOs(ua, platform, flags) {
+  if (/Windows/i.test(platform) || /Windows NT/i.test(ua)) return 'Windows';
+  if (/Android/i.test(ua)) {
+    const match = ua.match(/Android\s+([\d.]+)/i);
+    return match ? `Android ${match[1]}` : 'Android';
+  }
+  if (flags.iPad || flags.iPhone) return 'iOS';
+  if (/CrOS/i.test(ua)) return 'ChromeOS';
+  if (/Mac/i.test(platform) || /Macintosh/i.test(ua)) return 'macOS';
+  if (/Linux/i.test(platform) || /Linux/i.test(ua)) return 'Linux';
+  return 'Sistema desconhecido';
+}
+
+function detectModel(ua, platform, flags) {
+  if (flags.iPad) return 'iPad';
+  if (flags.iPhone) return 'iPhone';
+  if (flags.android) {
+    const match = ua.match(/Android [^;)]*;\s*([^;)]+?)(?:\s+Build[/;]|\s*\)|;)/i);
+    const model = match?.[1]?.replace(/\s+wv$/i, '').trim();
+    if (model && !/^(K|wv|Mobile)$/i.test(model)) return model;
+    return /Mobile/i.test(ua) ? 'Celular Android' : 'Tablet Android';
+  }
+  if (/Windows/i.test(platform) || /Windows NT/i.test(ua)) return 'PC Windows';
+  if (/CrOS/i.test(ua)) return 'Chromebook';
+  if (/Mac/i.test(platform) || /Macintosh/i.test(ua)) return 'Mac';
+  if (/Linux/i.test(platform) || /Linux/i.test(ua)) return 'PC Linux';
+  return 'Computador';
+}
+
+function composeDeviceLabel(model, browser) {
+  const parts = [];
+  if (model) parts.push(model);
+  if (browser && browser !== model) parts.push(browser);
+  return parts.join(' · ') || 'Dispositivo';
+}
+
+async function refineDeviceInfo() {
+  const data = navigator.userAgentData;
+  if (!data || typeof data.getHighEntropyValues !== 'function') return;
+
+  try {
+    const values = await data.getHighEntropyValues(['model', 'platform']);
+    const model = String(values?.model || '').trim();
+    if (!model) return;
+
+    const current = state.device || describeDevice();
+    const next = {
+      ...current,
+      label: composeDeviceLabel(model, current.browser),
+      os: String(values?.platform || '').trim() || current.os,
+    };
+    if (next.label === current.label && next.os === current.os) return;
+    state.device = next;
+    sendDevice();
+  } catch {
+    /* mantém a identificação básica */
+  }
+}
+
+function sendDevice() {
+  if (!state.authenticated || state.conn?.open !== true) return;
+  send({ type: 'device', device: state.device });
 }

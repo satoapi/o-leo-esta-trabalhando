@@ -13,7 +13,7 @@ import {
   timeAgo,
   toast,
   viewerLink,
-} from './shared.js?v=20261126e';
+} from './shared.js?v=20261126f';
 
 const QUALITY = {
   leve: {
@@ -98,6 +98,9 @@ for (const id of [
   'stat-fps',
   'stat-sent',
   'stat-fails',
+  'viewers-card',
+  'viewers-card-count',
+  'viewers-list',
   'popout',
   'presence-badge',
   'presence-note',
@@ -132,6 +135,7 @@ for (const id of [
   'host-error-text',
   'boss-warning',
   'boss-warning-count',
+  'boss-warning-device',
   'boss-popup',
   'boss-popup-text',
   'boss-popup-close',
@@ -183,7 +187,10 @@ function start() {
   setInterval(sampleStats, 1000);
   setInterval(adaptStreamQuality, 5000);
   setInterval(checkViewerHeartbeats, 10_000);
-  setInterval(renderPresenceAge, 30_000);
+  setInterval(() => {
+    renderPresenceAge();
+    renderViewers();
+  }, 30_000);
 
   document.addEventListener('visibilitychange', () => {
     updateBackgroundNotice();
@@ -444,6 +451,7 @@ function handleIncoming(conn) {
   const viewer = {
     conn,
     clientId: '',
+    device: null,
     authenticated: false,
     joinedAt: Date.now(),
     lastSeen: Date.now(),
@@ -485,6 +493,7 @@ function handleViewerData(viewer, raw) {
 
     viewer.authenticated = true;
     viewer.clientId = sanitizeClientId(message.clientId) || viewer.conn.peer;
+    viewer.device = sanitizeDevice(message.device);
     clearTimeout(viewer.authTimer);
     state.viewers.set(viewer.conn.peer, viewer);
 
@@ -495,9 +504,21 @@ function handleViewerData(viewer, raw) {
       viewers: countViewers(),
       quality: state.quality,
     });
+    // Pede a identificação também a versões antigas do painel.
+    sendTo(viewer, { type: 'identify' });
 
     updateViewers();
     setTimeout(() => sendStreamsTo(viewer), 120);
+    return;
+  }
+
+  if (message.type === 'device') {
+    const device = sanitizeDevice(message.device);
+    if (device) {
+      viewer.device = device;
+      renderViewers();
+      updateStats();
+    }
     return;
   }
 
@@ -576,7 +597,52 @@ function updateViewers() {
   if (state.viewersCount !== previous) applyAllSenderParams();
   updateStats();
   updatePeerUi();
+  renderViewers();
   broadcast({ type: 'viewers', count: state.viewersCount });
+}
+
+function renderViewers() {
+  const card = el['viewers-card'];
+  const list = el['viewers-list'];
+  if (!card || !list) return;
+
+  const unique = new Map();
+  for (const viewer of state.viewers.values()) {
+    const key = viewer.clientId || viewer.conn.peer;
+    const previous = unique.get(key);
+    if (!previous || viewer.joinedAt >= previous.joinedAt) unique.set(key, viewer);
+  }
+
+  const viewers = [...unique.values()].sort((a, b) => a.joinedAt - b.joinedAt);
+  card.hidden = viewers.length === 0;
+  if (el['viewers-card-count']) el['viewers-card-count'].textContent = String(viewers.length);
+
+  list.replaceChildren(
+    ...viewers.map((viewer) => {
+      const item = document.createElement('li');
+      const icon = document.createElement('span');
+      icon.className = 'viewer-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = viewer.device?.icon || '💻';
+
+      const body = document.createElement('div');
+      body.className = 'viewer-body';
+
+      const name = document.createElement('strong');
+      name.textContent = viewer.device?.label || 'Identificando dispositivo…';
+
+      const meta = document.createElement('span');
+      meta.className = 'viewer-meta';
+      const details = [];
+      if (viewer.device?.screen) details.push(viewer.device.screen);
+      details.push(`entrou ${timeAgo(viewer.joinedAt) || 'agora'}`);
+      meta.textContent = details.join(' · ');
+
+      body.append(name, meta);
+      item.append(icon, body);
+      return item;
+    }),
+  );
 }
 
 function sendTo(viewer, payload) {
@@ -652,6 +718,39 @@ function checkViewerHeartbeats() {
 function sanitizeClientId(value) {
   const text = String(value ?? '').trim();
   return /^[a-z0-9-]{8,64}$/i.test(text) ? text : '';
+}
+
+function sanitizeDevice(value) {
+  if (!value || typeof value !== 'object') return null;
+  const text = (input, max = 60) =>
+    String(input ?? '')
+      .replace(/[\u0000-\u001f<>]/g, '')
+      .trim()
+      .slice(0, max);
+
+  const label = text(value.label, 70);
+  if (!label) return null;
+
+  return {
+    label,
+    kind: text(value.kind, 20),
+    os: text(value.os, 40),
+    browser: text(value.browser, 40),
+    screen: text(value.screen, 20),
+    icon: ['💻', '📱', '🖥️', '📟'].includes(value.icon) ? value.icon : '💻',
+  };
+}
+
+function latestViewer() {
+  let latest = null;
+  for (const viewer of state.viewers.values()) {
+    if (!latest || viewer.joinedAt > latest.joinedAt) latest = viewer;
+  }
+  return latest;
+}
+
+function latestDeviceLabel() {
+  return sanitizeDevice(latestViewer()?.device)?.label || '';
 }
 
 /* ---------------- Câmera ---------------- */
@@ -1111,10 +1210,35 @@ async function sampleStats() {
   updateStats();
 }
 
-function bossViewerText(count) {
+function bossViewerText(count, deviceLabel = '') {
   const total = Math.max(1, Number(count) || 1);
-  if (total === 1) return '1 pessoa começou a assistir à sua transmissão agora.';
-  return `${new Intl.NumberFormat('pt-BR').format(total)} pessoas estão assistindo à sua transmissão agora.`;
+  const label = String(deviceLabel || '').trim();
+  if (total === 1) {
+    return label
+      ? `${label} começou a assistir à sua transmissão agora.`
+      : '1 pessoa começou a assistir à sua transmissão agora.';
+  }
+  const base = `${new Intl.NumberFormat('pt-BR').format(total)} pessoas estão assistindo à sua transmissão agora.`;
+  return label ? `${base} Dispositivo mais recente: ${label}.` : base;
+}
+
+function updateBossDevice() {
+  const element = el['boss-warning-device'];
+  if (!element) return;
+
+  const label = latestDeviceLabel();
+  if (!label) {
+    element.textContent = '';
+    element.hidden = true;
+    return;
+  }
+
+  const extra =
+    state.viewersCount > 1
+      ? ` +${new Intl.NumberFormat('pt-BR').format(state.viewersCount - 1)}`
+      : '';
+  element.textContent = `${label}${extra}`;
+  element.hidden = false;
 }
 
 function primeBossAudio() {
@@ -1178,7 +1302,7 @@ function playBossAlert() {
 
 function showBossPopup(count) {
   if (!el['boss-popup']) return;
-  el['boss-popup-text'].textContent = bossViewerText(count);
+  el['boss-popup-text'].textContent = bossViewerText(count, latestDeviceLabel());
   el['boss-popup'].hidden = false;
   document.body.classList.add('boss-popup-open');
   el['boss-popup-close']?.focus({ preventScroll: true });
@@ -1215,6 +1339,7 @@ function updateStats() {
 
   const watching = state.viewersCount > 0;
   el['boss-warning'].hidden = !watching;
+  updateBossDevice();
   if (watching) {
     el['boss-warning-count'].textContent =
       state.viewersCount === 1
@@ -1224,7 +1349,7 @@ function updateStats() {
       bossPopupShown = true;
       showBossPopup(state.viewersCount);
     } else if (el['boss-popup'] && !el['boss-popup'].hidden) {
-      el['boss-popup-text'].textContent = bossViewerText(state.viewersCount);
+      el['boss-popup-text'].textContent = bossViewerText(state.viewersCount, latestDeviceLabel());
     }
   } else if (bossPopupShown) {
     bossPopupShown = false;
